@@ -3,20 +3,9 @@
 import { useEffect, useRef } from "react";
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
+import { GenreColorMap, SubgenreColorMap } from "./Maps";
 
 cytoscape.use(fcose);
-
-const genreColorMap: Record<string, string> = {
-    rock: "#f87171",
-    pop: "#eb71f8",
-    country: "#71a7f8"
-}
-
-const subgenreColorMap: Record<string, string> = {
-    mathrock: "#ed3131",
-    poprock: "#dd427d",
-    altrock: "#a41717"
-}
 
 const genrePositions = {
     rock: { x: 100, y: 100 },
@@ -129,7 +118,7 @@ export default function Graph() {
         cy.nodes().forEach((node) => {
             const genre = node.data('genre');
             if (genre) {
-                node.style('background-color', genreColorMap[genre]);
+                node.style('background-color', GenreColorMap[genre]);
             }
 
             const pop = node.data('popularity');
@@ -144,8 +133,8 @@ export default function Graph() {
                 node.style({
                     'background-image': img,
                     'background-fit': 'cover',
-                    'border-width': 1,
-                    'border-color': genreColorMap[genre]
+                    'border-width': 2,
+                    'border-color': GenreColorMap[genre]
                 })
             }
 
@@ -155,7 +144,7 @@ export default function Graph() {
         cy.edges().forEach((edge) => {
             const subgenre = edge.data('subgenre');
             if (subgenre) {
-                edge.style('line-color', subgenreColorMap[subgenre])
+                edge.style('line-color', SubgenreColorMap[subgenre])
             }
         })
 
