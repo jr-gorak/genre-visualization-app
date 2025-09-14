@@ -3,50 +3,149 @@
 import { useEffect, useRef } from "react";
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
-import { GenreColorMap, SubgenreColorMap } from "./Maps";
+import { GenreColorMap } from "./Maps";
+import { ArtistList } from "../api/Artists";
+import { GenreList, SubgenreList } from "../api/Genres";
 
 cytoscape.use(fcose);
 
-const genrePositions = {
-    rock: { x: 100, y: 100 },
-    pop: { x: 600, y: 1600 },
-    country: { x: 350, y: 400 },
-};
+export function GenerateArtistNodes(list: any[]) {
+
+    const dataArray: { data: { id: any; label: any; popularity: any; followers: any; image: any; genre: any; subgenres: void; type: string; }; }[] = [];
+
+    function generateSubgenreArray(artist: { subgenres: any[]; }) {
+        const subgenreArray = [];
+        artist.subgenres?.forEach(subgenre => {
+            subgenreArray.push(subgenre.id)
+        })
+    }
+
+    list.forEach(artist => {
+        const artistData = {
+            data: {
+                id: artist.id,
+                label: artist.name,
+                popularity: artist.popularity,
+                followers: artist.followers,
+                image: artist.image,
+                genre: artist.genre.replace(/\s+/g, ""),
+                subgenres: generateSubgenreArray(artist),
+                type: "artist"
+            }
+        }
+        dataArray.push(artistData);
+    })
+    return dataArray;
+}
+
+export function GenerateWeightNodes(list: any[]) {
+    const dataArray: { data: { id: any; label: any; }; }[] = [];
+
+    list.forEach(genre => {
+        const genreData = {
+            data: {
+                id: "genre_" + genre.id,
+                label: genre.name,
+                type: "anchor"
+            }
+        }
+        dataArray.push(genreData);
+    })
+    return dataArray;
+}
+
+export function GenerateAnchorRelations(list: any[]) {
+
+    const dataArray = [];
+
+    for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+            const dataRelation = {
+                data: {
+                    source: "genre_" + list[i].id,
+                    target: "genre_" + list[j].id,
+                    weight: 50,
+                    type: "anchor"
+                }
+            }
+            dataArray.push(dataRelation);
+        }
+    }
+
+    return dataArray;
+}
+
+export function GenerateWeightedEdges(list: any[]) {
+    const dataArray: { data: { source: any; target: string; weight: unknown; }; }[] = [];
+
+    list.forEach(artist => {
+
+        for (const [target, weight] of Object.entries(artist.weights)) {
+            const dataRelation = {
+                data: {
+                    source: artist.id,
+                    target: "genre_" + target,
+                    weight: weight,
+                    type: "anchor"
+                }
+            }
+            dataArray.push(dataRelation)
+        }
+    })
+
+    return dataArray;
+}
+
+export function GenerateNodeConnections(subgenreList: any[], artistList: any[]) {
+    const dataArray: { data: { source: any; target: any; subgenre: any; }; }[] = [];
+
+    subgenreList.forEach(genre => {
+        if (genre.count > 1) {
+            const matchedArtists = artistList.filter(artist => artist.subgenres.find((subgenre: { id: any; }) => subgenre.id === genre.id))
+
+            if (matchedArtists) {
+
+                for (let i = 0; i < matchedArtists.length; i++) {
+                    for (let j = i + 1; j < matchedArtists.length; j++) {
+                        const dataConnection = {
+                            data: {
+                                source: matchedArtists[i].id,
+                                target: matchedArtists[j].id,
+                                subgenre: genre.id,
+                            }
+                        }
+                        dataArray.push(dataConnection);
+                    }
+                }
+            }
+        }
+    })
+
+    return dataArray;
+}
 
 export default function Graph() {
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const artistList = [
+    const dataList = [
         // Weight Nodes
-        { data: { id: "genre_rock", label: "Rock", position: genrePositions.rock }, },
-        { data: { id: "genre_pop", label: "Pop", position: genrePositions.pop }, },
-        { data: { id: "genre_country", label: "Country", position: genrePositions.country }, },
+        ...GenerateWeightNodes(GenreList),
 
         // Artist Nodes
-        { data: { id: "a1", label: "Artist 1", popularity: 30, image: "https://upload.wikimedia.org/wikipedia/commons/f/fa/Boy_Pablo_Piknik_i_Parken_2019_%28170641%29.jpg", genre: "rock", subgenres: ["mathrock", "poprock", "altrock"], type: "artist" } },
-        { data: { id: "a2", label: "Artist 2", popularity: 35, image: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Charlie_Daniels_in_2017.jpg/500px-Charlie_Daniels_in_2017.jpg", genre: "country", subgenres: ["bluegrass"], type: "artist" } },
-        { data: { id: "a3", label: "Artist 3", popularity: 50, genre: "pop", subgenres: ["poprock", "dreampop"], type: "artist" } },
-        { data: { id: "a4", label: "Artist 4", popularity: 43, genre: "rock", subgenres: ["altrock", "mathrock", "indierock"], type: "artist" } },
-        { data: { id: "a5", label: "Artist 5", popularity: 10, image: "https://s9.limitedrun.com/images/1220731/v600_tricot2017_square_942.jpg", genre: "rock", subgenres: ["mathrock", "jrock"], type: "artist" } },
+        ...GenerateArtistNodes(ArtistList),
 
-        // Weighted Pulls
-        { data: { source: "a1", target: "genre_rock", weight: 100 } },
-        { data: { source: "a1", target: "genre_pop", weight: 10 } },
-        { data: { source: "a2", target: "genre_country", weight: 100 } },
-        { data: { source: "a3", target: "genre_pop", weight: 100 } },
-        { data: { source: "a4", target: "genre_rock", weight: 100 } },
-        { data: { source: "a5", target: "genre_rock", weight: 100 } },
+        // Weighted Node Pulls
+        ...GenerateWeightedEdges(ArtistList),
 
-        { data: { source: "genre_rock", target: "genre_pop", weight: 5 } },
-        { data: { source: "genre_rock", target: "genre_country", weight: 5 } },
-        { data: { source: "genre_pop", target: "genre_country", weight: 5 } },
+        // Weighted Anchor Pulls
+        ...GenerateAnchorRelations(GenreList),
     ]
 
     useEffect(() => {
 
         const cy = cytoscape({
             container: containerRef.current,
-            elements: artistList,
+            elements: dataList,
             style: [
                 {
                     selector: "node",
@@ -68,13 +167,11 @@ export default function Graph() {
             layout: {
                 name: "fcose",
                 animate: true,
-                nodeRepulsion: 8000,
+                nodeRepulsion: 50000,
                 idealEdgeLength: (edge: any) => {
-                    if (edge.target().id().includes("genre_") && !edge.source().id().includes("genre_")) {
-                        console.log(1000 / edge.data("weight"))
+                    if (edge.target().target().includes("genre_") && !edge.source().id().includes("genre_")) {
                         return (1000 / edge.data("weight"))
                     } else if (edge.target().id().includes("genre_") && edge.source().id().includes("genre_")) {
-                        console.log(edge.target().id())
                         return 200
                     } else {
                         return 0;
@@ -85,25 +182,16 @@ export default function Graph() {
             wheelSensitivity: 5,
         });
 
-        const newEdges = [
-            { data: { source: "a1", target: "a4", subgenre: "mathrock" } },
-            { data: { source: "a1", target: "a5", subgenre: "mathrock" } },
-            { data: { source: "a1", target: "a3", subgenre: "poprock" } },
-            { data: { source: "a1", target: "a4", subgenre: "altrock" } },
-        ]
+        cy.add(GenerateNodeConnections(SubgenreList, ArtistList))
 
-        cy.add(newEdges)
-
-
-
-        cy.nodes('[id^="genre_"]').style({
+        cy.nodes('[type^="anchor"]').style({
             "background-opacity": 0,
             "label": "",
             "text-opacity": 0,
             "text-events": "none",
         });
 
-        cy.edges('[target^="genre_"]').style({
+        cy.edges('[type^="anchor"]').style({
             width: 0,
             "line-color": "transparent",
         });
@@ -144,7 +232,8 @@ export default function Graph() {
         cy.edges().forEach((edge) => {
             const subgenre = edge.data('subgenre');
             if (subgenre) {
-                edge.style('line-color', SubgenreColorMap[subgenre])
+                const colorMatch = SubgenreList.find(genre => genre.id === subgenre)
+                edge.style('line-color', colorMatch.color)
             }
         })
 
