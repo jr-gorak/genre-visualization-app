@@ -4,8 +4,7 @@ import { useEffect, useRef } from "react";
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
 import { GenreColorMap } from "./Maps";
-import { ArtistList } from "../api/Artists";
-import { GenreList, SubgenreList } from "../api/Genres";
+import { GenreList } from "../api/Genres";
 
 cytoscape.use(fcose);
 
@@ -13,11 +12,14 @@ export function GenerateArtistNodes(list: any[]) {
 
     const dataArray: { data: { id: any; label: any; popularity: any; followers: any; image: any; genre: any; subgenres: void; type: string; }; }[] = [];
 
-    function generateSubgenreArray(artist: { subgenres: any[]; }) {
-        const subgenreArray = [];
-        artist.subgenres?.forEach(subgenre => {
-            subgenreArray.push(subgenre.id)
+    function generateSubgenreArray(artist: { subgenres: any }): any {
+        const subgenreArray: any[] = [];
+        artist.subgenres?.forEach((subgenre: { id: any; }) => {
+            if (subgenre.id) {
+                subgenreArray.push(subgenre.id)
+            }
         })
+        return subgenreArray;
     }
 
     list.forEach(artist => {
@@ -124,18 +126,22 @@ export function GenerateNodeConnections(subgenreList: any[], artistList: any[]) 
     return dataArray;
 }
 
-export default function Graph() {
+export default function Graph({ activeArtistList, activeSubgenreList, activeFocus, center, setCenter, bubbleAction, setBubbleAction, setPopupOpen, setActiveArtist }: {
+    activeArtistList: any[]; activeSubgenreList: (any[]); activeFocus: string; center: boolean; setCenter: any; bubbleAction: boolean;
+    setBubbleAction: any; setPopupOpen: any; setActiveArtist: any
+}) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const cyRef = useRef<cytoscape.Core | null>(null);
 
     const dataList = [
         // Weight Nodes
         ...GenerateWeightNodes(GenreList),
 
         // Artist Nodes
-        ...GenerateArtistNodes(ArtistList),
+        ...GenerateArtistNodes(activeArtistList),
 
         // Weighted Node Pulls
-        ...GenerateWeightedEdges(ArtistList),
+        ...GenerateWeightedEdges(activeArtistList),
 
         // Weighted Anchor Pulls
         ...GenerateAnchorRelations(GenreList),
@@ -143,7 +149,7 @@ export default function Graph() {
 
     useEffect(() => {
 
-        const cy = cytoscape({
+        cyRef.current = cytoscape({
             container: containerRef.current,
             elements: dataList,
             style: [
@@ -152,7 +158,7 @@ export default function Graph() {
                     style: {
                         "background-color": "#60a5fa",
                         label: "data(label)",
-                        color: "#000000ff"
+                        color: "#000000ff",
                     }
                 },
                 {
@@ -182,39 +188,44 @@ export default function Graph() {
             wheelSensitivity: 5,
         });
 
-        cy.add(GenerateNodeConnections(SubgenreList, ArtistList))
+        cyRef.current.add(GenerateNodeConnections(activeSubgenreList, activeArtistList))
 
-        cy.nodes('[type^="anchor"]').style({
+        cyRef.current.nodes('[type^="anchor"]').style({
             "background-opacity": 0,
             "label": "",
             "text-opacity": 0,
             "text-events": "none",
         });
 
-        cy.edges('[type^="anchor"]').style({
+        cyRef.current.edges('[type^="anchor"]').style({
             width: 0,
-            "line-color": "transparent",
         });
 
         const minSize = 20;
         const maxSize = 60;
 
-        const popularities = cy.nodes().filter(node => node.data().type?.includes("artist")).map((n) => n.data("popularity"));
-        const minPop = Math.min(...popularities);
-        const maxPop = Math.max(...popularities);
+        const findData = cyRef.current.nodes().filter(node => node.data().type?.includes("artist")).map((n) => n.data(activeFocus.toLowerCase()));
+        const minData = Math.min(...findData);
+        const maxData = Math.max(...findData);
 
-        cy.nodes().forEach((node) => {
+        cyRef.current.nodes().forEach((node) => {
             const genre = node.data('genre');
             if (genre) {
                 node.style('background-color', GenreColorMap[genre]);
             }
 
-            const pop = node.data('popularity');
-            const size = ((pop - minPop) / (maxPop - minPop)) * (maxSize - minSize) + minSize
-            node.style({
-                width: size,
-                height: size
-            });
+
+            const data = node.data(activeFocus.toLowerCase());
+            if (data) {
+                const size = ((Math.log(data) - Math.log(minData)) /
+                    (Math.log(maxData) - Math.log(minData))) *
+                    (maxSize - minSize) + minSize;
+                node.style({
+                    width: size,
+                    height: size
+                });
+            }
+
 
             const img = node.data("image");
             if (img) {
@@ -229,18 +240,100 @@ export default function Graph() {
             node.lock();
         });
 
-        cy.edges().forEach((edge) => {
+        cyRef.current.edges().forEach((edge) => {
             const subgenre = edge.data('subgenre');
             if (subgenre) {
-                const colorMatch = SubgenreList.find(genre => genre.id === subgenre)
+                const colorMatch = activeSubgenreList.find(genre => genre.id === subgenre)
                 edge.style('line-color', colorMatch.color)
             }
         })
 
+        cyRef.current.on('tap', 'node', function (evt) {
+            const node = evt.target;   // the clicked node
+            setPopupOpen(true);
+            const findArtist = activeArtistList.find(artist => node.data('id') === artist.id)
+            if (findArtist) {
+                setActiveArtist(findArtist)
+            }
+        });
+
         return () => {
-            cy.destroy();
+            cyRef.current?.destroy();
         }
     }, []);
+
+    useEffect(() => {
+
+        const minSize = 20;
+        const maxSize = 60;
+
+        const findData = cyRef.current?.nodes().filter(node => node.data().type?.includes("artist")).map((n) => n.data(activeFocus.toLowerCase()));
+        let minData = null;
+        let maxData = null;
+
+        if (findData) {
+            minData = Math.min(...findData);
+            maxData = Math.max(...findData);
+        }
+
+        cyRef.current?.nodes().forEach((node) => {
+            const genre = node.data('genre');
+            if (genre) {
+                node.style('background-color', GenreColorMap[genre]);
+            }
+
+
+            const data = node.data(activeFocus.toLowerCase());
+            if (data && minData && maxData) {
+                const size = ((Math.log(data) - Math.log(minData)) /
+                    (Math.log(maxData) - Math.log(minData))) *
+                    (maxSize - minSize) + minSize;
+                node.style({
+                    width: size,
+                    height: size
+                });
+            }
+        });
+
+        if (center) {
+            cyRef.current?.center();
+            cyRef.current?.fit(cyRef.current.elements(), 50)
+            setCenter(false);
+        }
+
+    }, [activeFocus, center])
+
+    useEffect(() => {
+
+        if (bubbleAction) {
+            cyRef.current?.edges().forEach((edge) => {
+                activeSubgenreList.forEach(subgenre => {
+                    const target = edge.data('subgenre');
+                    if (target === subgenre.id) {
+                        if (subgenre.visible === false) {
+                            edge.style('display', 'none')
+                        } else if (subgenre.visible === true) {
+                            edge.style('display', 'element')
+                        }
+                    }
+                })
+            })
+
+            cyRef.current?.nodes().filter(node => node.data("subgenres") !== undefined).forEach((node) => {
+                node.style('display', 'none')
+                activeSubgenreList.forEach(subgenre => {
+                    const target = node.data('subgenres');
+                    if (target.includes(subgenre.id)) {
+                        if (subgenre.visible === true) {
+                            node.style('display', 'element')
+                        }
+                    }
+                })
+            })
+            setBubbleAction(false);
+        }
+
+    }, [bubbleAction, activeSubgenreList])
 
     return <div ref={containerRef} className="w-full h-screen" />
 }

@@ -1,18 +1,48 @@
 "use client"
 
 import Graph from "./components/Graph";
-import { useState } from "react";
+import { SetStateAction, useEffect, useState } from "react";
 import { ArtistList } from "./api/Artists";
 import { SubgenreList } from "./api/Genres";
+import { ArtistPopup } from "./components/ArtistPopup";
+
+export function toggleSubgenreBubble(subgenreList: any[], targetID: any, setActiveSubgenreList: { (value: SetStateAction<any[]>): void; (arg0: any[]): void; }, setBubbleAction: { (value: SetStateAction<boolean>): void; (arg0: boolean): void; }) {
+
+  if (subgenreList.every(subgenre => subgenre.visible)) {
+    subgenreList = subgenreList.map(subgenre => ({ ...subgenre, visible: false }));
+    const target = subgenreList.find(subgenre => subgenre.id === targetID)
+    target.visible = true;
+    setActiveSubgenreList([...subgenreList])
+  } else if (!subgenreList.every(subgenre => subgenre.visible)) {
+    const target = subgenreList.find(subgenre => subgenre.id === targetID)
+    target.visible = !target.visible;
+    if (subgenreList.every(subgenre => !subgenre.visible)) {
+      subgenreList = subgenreList.map(subgenre => ({ ...subgenre, visible: true }));
+    }
+    setActiveSubgenreList([...subgenreList])
+  }
+  setBubbleAction(true);
+}
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(true);
   const [toggleFocus, setToggleFocus] = useState(false);
   const [activeFocus, setActiveFocus] = useState("Popularity");
+  const [activeArtistList, setActiveArtistList] = useState(ArtistList)
+  const [activeSubgenreList, setActiveSubgenreList] = useState(SubgenreList)
+  const [center, setCenter] = useState(false);
+  const [bubbleAction, setBubbleAction] = useState(false);
+  const [sortedSubgenreBubbles, setSortedSubgenreBubbles] = useState([...activeSubgenreList].sort((a, b) => b.count - a.count));
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [activeArtist, setActiveArtist] = useState<any>(null);
 
   const focusOptions = ["Popularity", "Followers", "Listens"]
 
-  const sortedSubgenreBubbles = [...SubgenreList].sort((a, b) => b.count - a.count)
+  useEffect(() => {
+
+    setSortedSubgenreBubbles([...activeSubgenreList].sort((a, b) => b.count - a.count))
+
+  }, [activeSubgenreList])
 
   return (
     <div className="flex items-center w-full">
@@ -42,11 +72,10 @@ export default function Home() {
           <div>
             <h2 className="font-bold text-lg text-center">Artists</h2>
             <div className="max-h-80 flex flex-col items-center text-center overflow-y-auto p-4 space-y-6">
-              {ArtistList.map((artist) => (
+              {activeArtistList.map((artist) => (
                 <div key={artist.id} className="relative flex flex-col items-center text-center space-y-2 w-24">
 
-                  <img src={artist.image} alt={artist.name}
-                    className="w-24 h-24 object-cover rounded-full shadow-md" />
+                  <img src={artist.image} alt={artist.name} className="w-24 h-24 object-cover rounded-full shadow-md" onClick={() => { setPopupOpen(true); setActiveArtist(artist) }} />
                   <p className="text-sm font-medium">{artist.name}</p>
 
                   <button className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center shadow-md hover:bg-red-600" aria-label={`Remove ${artist.name}`}>
@@ -74,12 +103,18 @@ export default function Home() {
         </button>
       )}
 
-      <Graph />
+      <Graph activeArtistList={activeArtistList} activeSubgenreList={activeSubgenreList} activeFocus={activeFocus} center={center} setCenter={setCenter}
+        bubbleAction={bubbleAction} setBubbleAction={setBubbleAction} setPopupOpen={() => setPopupOpen(true)} setActiveArtist={setActiveArtist} />
+
+      {popupOpen && (
+        <ArtistPopup popupOpen={popupOpen} onClose={() => { setPopupOpen(false); setActiveArtist(null) }} activeArtist={activeArtist} />
+      )}
 
       <div className="absolute top-4 right-4 flex flex-col space-y-4 items-end max-h-80 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {sortedSubgenreBubbles.map((subgenre) => (
           <div key={subgenre.id} className="w-40 min-h-10 rounded-full text-white flex items-center justify-center shadow-lg"
-            style={{ backgroundColor: subgenre.color !== "" ? subgenre.color : "#ededed" }}>
+            style={subgenre.visible === true ? { backgroundColor: subgenre.color !== "" ? subgenre.color : "#ededed" } : { backgroundColor: "#ededed" }}
+            onClick={() => toggleSubgenreBubble(activeSubgenreList, subgenre.id, setActiveSubgenreList, setBubbleAction)}>
             {subgenre.name} {subgenre.count}
           </div>
         ))}
@@ -113,7 +148,7 @@ export default function Home() {
       </div>
 
       <button className="fixed bottom-6 left-1/2 transform w-14 h-14 rounded-full border border-white/30 bg-white/20 backdrop-blur-sm 
-        flex items-center justify-center text-sm font-semibold text-black shadow-lg hover:bg-lime-400/20 transition">
+        flex items-center justify-center text-sm font-semibold text-black shadow-lg hover:bg-lime-400/20 transition" onClick={() => setCenter(true)}>
         Center
       </button>
 
